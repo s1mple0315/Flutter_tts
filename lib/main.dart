@@ -1,105 +1,93 @@
 import 'package:flutter/material.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:flutter_tts/flutter_tts.dart';
+import 'services/speech_service.dart';
+import 'widgets/session_button.dart';
+import 'widgets/status_text.dart';
+import 'models/user_response.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(SpeechRecognitionApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
+class SpeechRecognitionApp extends StatefulWidget {
   @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      title: 'Voice Assistant',
-      home: VoiceAssistantPage(),
-    );
-  }
+  _SpeechRecognitionAppState createState() => _SpeechRecognitionAppState();
 }
 
-class VoiceAssistantPage extends StatefulWidget {
-  const VoiceAssistantPage({super.key});
+class _SpeechRecognitionAppState extends State<SpeechRecognitionApp> {
+  final SpeechService _speechService = SpeechService();
+  List<UserResponse> userResponses = [];
+  String status = "App is ready";
 
-  @override
-  _VoiceAssistantPageState createState() => _VoiceAssistantPageState();
-}
-
-class _VoiceAssistantPageState extends State<VoiceAssistantPage> {
-  late stt.SpeechToText _speech;
-  late FlutterTts _flutterTts;
-  bool _isSessionActive = false;
-  String _sessionStatus = "Session is not started yet.";
-  String _userResponse = "";
-  
   @override
   void initState() {
     super.initState();
-    _speech = stt.SpeechToText();
-    _flutterTts = FlutterTts();
+    _speechService.initialize();
   }
 
-  void _startSession() async {
+  @override
+  void dispose() {
+    _speechService.dispose();
+    super.dispose();
+  }
+
+  void startSession() {
     setState(() {
-      _isSessionActive = true;
-      _sessionStatus = "Session Started. Respond to the commands.";
+      status = "Listening for your response...";
     });
 
-    await _flutterTts.speak("Feel the joy");
-
-    _startListening();
-  }
-
-  void _endSession() async {
-    setState(() {
-      _isSessionActive = false;
-      _sessionStatus = "Session Ended.";
-    });
-
-    _speech.stop();
-    await _flutterTts.stop();
-  }
-
-  void _startListening() async {
-    if (await _speech.initialize()) {
+    _speechService.startListening((String response) {
       setState(() {
-        _userResponse = "";
+        userResponses.add(UserResponse(response: response));
+        status = "Response recorded: $response";
       });
+    });
+  }
 
-      _speech.listen(onResult: (result) {
-        setState(() {
-          _userResponse = result.recognizedWords;
-        });
-      });
-    }
+  void stopSession() {
+    setState(() {
+      status = "Session stopped.";
+    });
+
+    _speechService.stopListening();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Voice Assistant'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              _sessionStatus,
-              style: const TextStyle(fontSize: 18),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              _userResponse.isEmpty ? '' : 'You said: $_userResponse',
-              style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
-            ),
-            const SizedBox(height: 30),
-            ElevatedButton(
-              onPressed: _isSessionActive ? _endSession : _startSession,
-              child: Text(_isSessionActive ? 'End Session' : 'Start Session'),
-            ),
-          ],
+    return MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(title: Text("Speech Recognition App")),
+        body: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              StatusText(status: status),
+              SizedBox(height: 20),
+              SessionButton(
+                isSessionActive: status == "Listening for your response...",
+                startSession: startSession,
+                stopSession: stopSession,
+              ),
+              SizedBox(height: 20),
+              userResponses.isEmpty
+                  ? Text(
+                      "No responses recorded yet.",
+                      style: TextStyle(fontSize: 18, color: Colors.grey),
+                    )
+                  : Expanded(
+                      child: ListView.builder(
+                        itemCount: userResponses.length,
+                        itemBuilder: (context, index) {
+                          return ListTile(
+                            title: Text(
+                                "Response ${index + 1}: ${userResponses[index].response}"),
+                          );
+                        },
+                      ),
+                    ),
+            ],
+          ),
         ),
       ),
     );
